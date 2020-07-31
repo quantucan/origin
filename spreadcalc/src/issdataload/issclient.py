@@ -16,6 +16,7 @@ import datetime
 class MoexISSClient:
     _moex_auth_url = 'https://passport.moex.com/authenticate:443'
     _hwd = HolidayWeekDays()
+    #_non_tqcb_bonds = ('', )
     
     def __init__(self, user = '', password = ''):
         self.pswd_mgr = request.HTTPPasswordMgrWithDefaultRealm()
@@ -101,6 +102,10 @@ class MoexISSClient:
             
             if board_rec is None:
                 continue
+            
+            #Check for duplicated quotes for the same bond on different boards
+            #if jrec[c['BOARDID']] == 'TQCB' and jrec[c['SECID']] in self._non_tqcb_bonds:
+            #    continue
             
             try:
                 vol = int(jrec[c['VOLUME']])

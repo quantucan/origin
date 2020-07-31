@@ -15,7 +15,7 @@ def main():
     #iss.update_bonds_info()
     #iss._duplicate_boards(datetime.date(2020, 6, 22))
     
-    trdate = datetime.date(2020, 7, 30)  
+    trdate = datetime.date(2020, 7, 31)  
     for i in range(1):        
         res = iss.load_end_of_day(trdate)
         if res == False:
