@@ -16,7 +16,7 @@ import datetime
 class MoexISSClient:
     _moex_auth_url = 'https://passport.moex.com/authenticate:443'
     _hwd = HolidayWeekDays()
-    #_non_tqcb_bonds = ('', )
+    #_non_tqcb_bonds = ('RU000A0ZZ8A2', )
     
     def __init__(self, user = '', password = ''):
         self.pswd_mgr = request.HTTPPasswordMgrWithDefaultRealm()
@@ -297,6 +297,8 @@ class MoexISSClient:
     def _create_bond_record(self, moex_secid):
         new_bond_rec = BondRecord()
         
+        insert_flag = False
+        
         regnumber = None
         emitent_seccode = None        
         early_r = 0
@@ -352,6 +354,18 @@ class MoexISSClient:
         if self.db_cursor.rowcount > 0:
             emitent_id = row[0]
         else:                         
+            if emitent_seccode is None:
+                insert_flag = True
+            else:
+                self.db_cursor.execute("SELECT id FROM emitents WHERE emitent_code = %s", (emitent_seccode, ))
+                row = self.db_cursor.fetchone()
+                if self.db_cursor.rowcount > 0:
+                    emitent_id = row[0]
+                    self.db_cursor.execute("UPDATE emitents SET moex_emitent_id = %s WHERE id = %s", (moex_emitent_id, emitent_id))
+                else:
+                    insert_flag = True
+            
+        if insert_flag:            
             #emitents
             self.db_cursor.execute("INSERT INTO emitents (emitent_code, moex_emitent_id, issuer_type) VALUES (%s, %s, %s)", (emitent_seccode, moex_emitent_id, issuer_type))
             
