@@ -3,7 +3,6 @@ Created on 28 янв. 2020 г.
 
 @author: Александр
 '''
-
 from issdataload.bondrecord import BondRecord, BoardRecord, HolidayWeekDays
 from urllib import request  
 from http import cookiejar
