@@ -11,6 +11,8 @@ import json
 import re
 import mysql.connector
 import datetime
+import os
+import os.path
 
 class MoexISSClient:
     _moex_auth_url = 'https://passport.moex.com/authenticate:443'
@@ -39,8 +41,11 @@ class MoexISSClient:
         #Fetch boards and settlement codes from database
         self._boards_dict = self._fetch_boards_records('MAIN')        
         
-        self._f_log = open('update.log', 'at', encoding='utf-8')
-        
+        log_dir = os.path.expanduser('~Александр\\issdataload\\') 
+        if not os.path.isdir(log_dir):
+            os.mkdir(log_dir)
+        self._f_log = open(os.path.join(log_dir, 'update.log'), 'at', encoding='utf-8')        
+            
         return
     
     def _connect(self, user='root', password='admiN123', database='bondinfo', host='127.0.0.1', port=3306):
@@ -230,8 +235,6 @@ class MoexISSClient:
         with open('absent_securities.txt', 'wt', encoding='utf-8') as f:              
             for r in absent_bonds.values():
                 f.write(str(r) + '\n')
-        
-        print('Bondinfo database has been updated')        
         
         return        
     
