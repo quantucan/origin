@@ -3,8 +3,6 @@ Created on 28 янв. 2020 г.
 
 @author: Александр
 '''
-import sys
-import os.path
 import datetime
 from issdataload.issclient import MoexISSClient
 

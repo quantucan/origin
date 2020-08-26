@@ -162,11 +162,12 @@ class MoexISSClient:
         #Fetch all securities from database
         bonds_dict = self._fetch_bonds_records(d, True)
 
-        updated_bonds = dict()
-        unchanged_bonds = dict()        
-        created_bonds = dict()
-        absent_bonds = dict()
-        duplicate_n = 0
+        created_bonds = list()
+        coupons_updated = list()
+        putoptions_updated = list()
+        
+        unchanged_bonds_count = 0
+        absent_bonds_count = 0        
         last_moex_secid=''
                                 
         req = request.Request(url, None, headers={'User-Agent' : 'Chrome/51.0'})            
@@ -189,24 +190,24 @@ class MoexISSClient:
             
             last_moex_secid = jrec[c['SECID']]                 
                 
-            if last_moex_secid in updated_bonds or last_moex_secid in unchanged_bonds or last_moex_secid in absent_bonds:
-                duplicate_n += 1
-                continue
-                 
             bond_rec = bonds_dict.pop(last_moex_secid, None)                
                 
             updated_bond_rec = self._update_bond_record(bond_rec, jrec, c)
                 
             if bond_rec is None:
                 if updated_bond_rec is None:
-                    absent_bonds[last_moex_secid] = (last_moex_secid, jrec[c['SHORTNAME']], jrec[c['FACEUNIT']])
+                    #absent_bonds[last_moex_secid] = (last_moex_secid, jrec[c['SHORTNAME']], jrec[c['FACEUNIT']])
+                    absent_bonds_count += 1
                 else:
-                    created_bonds[last_moex_secid] = updated_bond_rec
+                    created_bonds.append(updated_bond_rec.sid)
             else:
                 if updated_bond_rec == bond_rec:
-                    unchanged_bonds[last_moex_secid] = updated_bond_rec
+                    unchanged_bonds_count += 1
                 else:
-                    updated_bonds[last_moex_secid] = updated_bond_rec                       
+                    if updated_bond_rec.cid != bond_rec.cid:
+                        coupons_updated.append(updated_bond_rec.cid)
+                    elif updated_bond_rec.pid != bond_rec.pid:
+                        putoptions_updated.append(updated_bond_rec.pid)                       
                     
         if len(bonds_dict) > 0:
             mark_matured_count = self._mark_matured_bonds(bonds_dict)
@@ -217,12 +218,12 @@ class MoexISSClient:
         
         d = datetime.datetime.now()
         self._f_log.write('{:%d-%m-%Y %H:%M:%S} Records processed: {}\n'.format(d, len(jdata)))        
-        self._f_log.write('{:%d-%m-%Y %H:%M:%S} Bonds created: {}\n'.format(d, len(created_bonds)))
-        self._f_log.write('{:%d-%m-%Y %H:%M:%S} Bonds updated: {}\n'.format(d, len(updated_bonds)))
-        self._f_log.write('{:%d-%m-%Y %H:%M:%S} Bonds unchanged: {}\n'.format(d, len(unchanged_bonds)))
+        #self._f_log.write('{:%d-%m-%Y %H:%M:%S} Bonds created: {}\n'.format(d, len(created_bonds)))
+        #self._f_log.write('{:%d-%m-%Y %H:%M:%S} Coupons updated: {}\n'.format(d, len(coupons_updated)))
+        #self._f_log.write('{:%d-%m-%Y %H:%M:%S} Putoptions updated: {}\n'.format(d, len(putoptions_updated)))
+        self._f_log.write('{:%d-%m-%Y %H:%M:%S} Bonds unchanged: {}\n'.format(d, unchanged_bonds_count))
         self._f_log.write('{:%d-%m-%Y %H:%M:%S} Bonds marked as matured: {}\n'.format(d, mark_matured_count))
-        self._f_log.write('{:%d-%m-%Y %H:%M:%S} Eurobonds: {}\n'.format(d, len(absent_bonds)))
-        self._f_log.write('{:%d-%m-%Y %H:%M:%S} Bonds duplicated: {}\n'.format(d, duplicate_n))
+        self._f_log.write('{:%d-%m-%Y %H:%M:%S} Eurobonds: {}\n'.format(d, absent_bonds_count))        
         
         with open('created_securities.txt', 'wt', encoding='utf-8') as f:              
             for r in created_bonds.values():
@@ -232,10 +233,6 @@ class MoexISSClient:
             for r in updated_bonds.values():
                 f.write(r.bond_print() + '\n')
 
-        with open('absent_securities.txt', 'wt', encoding='utf-8') as f:              
-            for r in absent_bonds.values():
-                f.write(str(r) + '\n')
-        
         return        
     
     def _update_bond_record(self, bond_rec, jrec, c):                                                                                
