@@ -23,8 +23,9 @@ if upd_flag == '--updbonds':
         #iss._duplicate_boards(datetime.date(2020, 6, 22))
     except Exception as err:
         print('Exception:', err)
+    pass
 elif upd_flag == '--updquotes':
-    trdate = datetime.date(2020, 8, 25)
+    trdate = datetime.date(2020, 8, 27)
     try:
         res = iss.load_end_of_day(trdate)
     except Exception as err:

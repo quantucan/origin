@@ -16,6 +16,11 @@
 	</natures>
 	<linkedResources>
 		<link>
+			<name>src/issdataload/update.log</name>
+			<type>1</type>
+			<location>C:/Users/Александр/issdataload/update.log</location>
+		</link>
+		<link>
 			<name>src/spreadcalc/csvparse/ListingSecurityList.csv</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/Users/%D0%90%D0%BB%D0%B5%D0%BA%D1%81%D0%B0%D0%BD%D0%B4%D1%80/Desktop/SEM21/ListingSecurityList.csv</locationURI>

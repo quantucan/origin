@@ -12,7 +12,6 @@ import re
 import mysql.connector
 import datetime
 import os
-import os.path
 
 class MoexISSClient:
     _moex_auth_url = 'https://passport.moex.com/authenticate:443'
@@ -166,9 +165,10 @@ class MoexISSClient:
         coupons_updated = list()
         putoptions_updated = list()
         
+        last_moex_secid=''
         unchanged_bonds_count = 0
         absent_bonds_count = 0        
-        last_moex_secid=''
+        mark_matured_count = 0        
                                 
         req = request.Request(url, None, headers={'User-Agent' : 'Chrome/51.0'})            
         issconn = self.iss_opener.open(req)
@@ -200,43 +200,41 @@ class MoexISSClient:
                     absent_bonds_count += 1
                 else:
                     created_bonds.append(updated_bond_rec.sid)
+                    if updated_bond_rec.cid is not None:
+                        coupons_updated.append(updated_bond_rec.cid)
+                    if updated_bond_rec.pid is not None:
+                        putoptions_updated.append(updated_bond_rec.pid)
             else:
                 if updated_bond_rec == bond_rec:
                     unchanged_bonds_count += 1
                 else:
                     if updated_bond_rec.cid != bond_rec.cid:
                         coupons_updated.append(updated_bond_rec.cid)
-                    elif updated_bond_rec.pid != bond_rec.pid:
+                    if updated_bond_rec.pid != bond_rec.pid:
                         putoptions_updated.append(updated_bond_rec.pid)                       
                     
         if len(bonds_dict) > 0:
             mark_matured_count = self._mark_matured_bonds(bonds_dict)
-        else:
-            mark_matured_count = 0                 
                 
         self.cnx.commit()
         
         d = datetime.datetime.now()
         self._f_log.write('{:%d-%m-%Y %H:%M:%S} Records processed: {}\n'.format(d, len(jdata)))        
-        #self._f_log.write('{:%d-%m-%Y %H:%M:%S} Bonds created: {}\n'.format(d, len(created_bonds)))
-        #self._f_log.write('{:%d-%m-%Y %H:%M:%S} Coupons updated: {}\n'.format(d, len(coupons_updated)))
-        #self._f_log.write('{:%d-%m-%Y %H:%M:%S} Putoptions updated: {}\n'.format(d, len(putoptions_updated)))
+        if len(created_bonds) > 0:
+            self._f_log.write('{0:%d-%m-%Y %H:%M:%S} Bonds created: {1} (id {2}..{3})\n'.format(d, len(created_bonds), created_bonds[0], created_bonds[-1]))
+        if len(coupons_updated) > 0:
+            self._f_log.write('{0:%d-%m-%Y %H:%M:%S} Coupons updated: {1} (id {2}..{3})\n'.format(d, len(coupons_updated), coupons_updated[0], coupons_updated[-1]))
+        if len(putoptions_updated) > 0:
+            self._f_log.write('{0:%d-%m-%Y %H:%M:%S} Putoptions updated: {1} (id {2}..{3})\n'.format(d, len(putoptions_updated), putoptions_updated[0], putoptions_updated[-1]))
         self._f_log.write('{:%d-%m-%Y %H:%M:%S} Bonds unchanged: {}\n'.format(d, unchanged_bonds_count))
         self._f_log.write('{:%d-%m-%Y %H:%M:%S} Bonds marked as matured: {}\n'.format(d, mark_matured_count))
         self._f_log.write('{:%d-%m-%Y %H:%M:%S} Eurobonds: {}\n'.format(d, absent_bonds_count))        
         
-        with open('created_securities.txt', 'wt', encoding='utf-8') as f:              
-            for r in created_bonds.values():
-                f.write(r.bond_print() + '\n')
-
-        with open('updated_bonds.txt', 'wt', encoding='utf-8') as f:              
-            for r in updated_bonds.values():
-                f.write(r.bond_print() + '\n')
-
         return        
     
     def _update_bond_record(self, bond_rec, jrec, c):                                                                                
-        last_moex_secid = jrec[c['SECID']]
+        buybackdate_not_found = False
+        coupondate_not_found = False
         
         if bond_rec is None:            
             updated_bond_rec = self._create_bond_record(jrec[c['SECID']])
@@ -252,14 +250,16 @@ class MoexISSClient:
             
             if valid_buybackdate is not None:                
                 if updated_bond_rec.buybackdate is not None and valid_buybackdate != updated_bond_rec.buybackdate:
+                    #assume no valid buybackdate in database records 
+                    buybackdate_not_found = True
                     self.db_cursor.execute("SELECT id, buybackdate FROM putoptions1 WHERE secid = %s", (updated_bond_rec.sid, ))                
                 
                     for row in self.db_cursor:
+                        #try to find valid buybackdate in database records
                         if valid_buybackdate == row[1]:
-                            updated_bond_rec.pid = row[0]
-                            updated_bond_rec.buybackdate = row[1]                            
+                            buybackdate_not_found = False
                 
-                if updated_bond_rec.buybackdate is None or valid_buybackdate != updated_bond_rec.buybackdate:            
+                if updated_bond_rec.buybackdate is None or buybackdate_not_found:            
                     valid_offerdate = self._get_valid_date(jrec[c['OFFERDATE']])
                     #putoptions1                    
                     self.db_cursor.execute("INSERT INTO putoptions1 (secid, buybackdate, offerdate) VALUES (%s, %s, %s)", (updated_bond_rec.sid, valid_buybackdate, valid_offerdate))            
@@ -274,22 +274,22 @@ class MoexISSClient:
             
             if valid_coupondate is not None:
                 if updated_bond_rec.coupondate is not None and valid_coupondate != updated_bond_rec.coupondate:
+                    #assume no valid coupondate in database records
+                    coupondate_not_found = True
                     self.db_cursor.execute("SELECT id, coupondate FROM coupons1 WHERE secid = %s", (updated_bond_rec.sid, ))
                     
                     for row in self.db_cursor:
+                        #try to find valid coupondate in database records
                         if valid_coupondate == row[1]:
-                            updated_bond_rec.cid = row[0]
-                            updated_bond_rec.coupondate = row[1]
+                            coupondate_not_found = False
                 
-                if updated_bond_rec.coupondate is None or valid_coupondate != updated_bond_rec.coupondate:            
+                if updated_bond_rec.coupondate is None or coupondate_not_found:            
                     #coupons1
                     self.db_cursor.execute("INSERT INTO coupons1 (secid, coupondate, couponperiod, couponpercent, couponvalue) VALUES (%s, %s, %s, %s, %s)", (updated_bond_rec.sid, valid_coupondate, jrec[c['COUPONPERIOD']], jrec[c['COUPONPERCENT']], jrec[c['COUPONVALUE']]))
             
                     if self.db_cursor.lastrowid is not None:
                         updated_bond_rec.cid = self.db_cursor.lastrowid 
                         updated_bond_rec.coupondate = valid_coupondate
-                #elif valid_coupondate < updated_bond_rec.coupondate:
-                #    self._f_log.write('For {} iss coupondate {:%d-%m-%Y} is earlier than database coupondate {:%d-%m-%Y}\n'.format(last_moex_secid, valid_coupondate, updated_bond_rec.coupondate))
                 
         return updated_bond_rec
                 
@@ -461,8 +461,6 @@ class MoexISSClient:
         matured_to_date = list((datetime.date.today(), v.sid) for v in matured_bonds.values())
         
         self.db_cursor.executemany("UPDATE bonds1 SET is_matured = TRUE WHERE matdate < %s AND id = %s", matured_to_date)
-        
-        self.cnx.commit()
         
         return self.db_cursor.rowcount                
     
