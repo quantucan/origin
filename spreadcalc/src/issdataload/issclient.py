@@ -16,7 +16,6 @@ import os
 class MoexISSClient:
     _moex_auth_url = 'https://passport.moex.com/authenticate:443'
     _hwd = HolidayWeekDays()
-    #_non_tqcb_bonds = ('RU000A0ZZ8A2', )
     
     def __init__(self, user = '', password = ''):
         self.pswd_mgr = request.HTTPPasswordMgrWithDefaultRealm()
@@ -57,10 +56,12 @@ class MoexISSClient:
     def load_end_of_day(self, tradedate, url='http://iss.moex.com/iss/history/engines/stock/markets/bonds/sessions/1/securities.json'):
         #Fetch all securities from database
         bonds_dict = self._fetch_bonds_records(tradedate, False)
+        
+        processed_moex_secids = list()
                 
         jdata = list()
         history_len = 1
-        firstpass = True
+        firstpass = True        
             
         y1date = self._get_settlement_date(tradedate, 'Y1')
         
@@ -91,7 +92,7 @@ class MoexISSClient:
                 print(err)
                 break            
             
-        self._f_log.write('{:%d-%m-%Y %H:%M:%S} Tradedate {}: {} quotes loaded out of {}\n'.format(datetime.datetime.now(), tradedate, len(jdata), history_len))
+        self._f_log.write('{0:%d-%m-%Y %H:%M:%S} Tradedate {1}: {2} quotes loaded out of {3}\n'.format(datetime.datetime.now(), tradedate, len(jdata), history_len))
         
         if len(jdata) < history_len:
             return False
@@ -101,24 +102,21 @@ class MoexISSClient:
         inserted_quotes = 0        
             
         for jrec in jdata:
+            last_moex_secid = jrec[c['SECID']]            
             board_rec = self._boards_dict.get(jrec[c['BOARDID']], None)            
             
-            if board_rec is None:
-                continue
-            
-            #Check for duplicated quotes for the same bond on different boards
-            #if jrec[c['BOARDID']] == 'TQCB' and jrec[c['SECID']] in self._non_tqcb_bonds:
-            #    continue
+            if board_rec is None or last_moex_secid in processed_moex_secids:
+                continue            
             
             try:
                 vol = int(jrec[c['VOLUME']])
                 if vol > 4294967295:
                     vol = 0
-                    self._f_log.write('{:%d-%m-%Y} volume for bond {}, {} = {}\n'.format(tradedate, jrec[c['SHORTNAME']], jrec[c['SECID']], jrec[c['VOLUME']])) 
+                    self._f_log.write('{0:%d-%m-%Y} volume for bond {1}, {2} = {3}\n'.format(tradedate, jrec[c['SHORTNAME']], last_moex_secid, jrec[c['VOLUME']])) 
             except:
                 vol = 0
             
-            bond_rec = bonds_dict.pop(jrec[c['SECID']], None)                
+            bond_rec = bonds_dict.pop(last_moex_secid, None)                
                 
             updated_bond_rec = self._update_bond_record(bond_rec, jrec, c)
             
@@ -139,17 +137,17 @@ class MoexISSClient:
                 try:
                     self.db_cursor.execute(ins_quote_stmt, quote_data)
                 except Exception as err:
-                    msg = '{:%d-%m-%Y %H:%M:%S} MySQL exception: {}\n'.format(datetime.datetime.now(), err) 
-                    self._f_log.write(msg) 
-                    print(msg)
+                    self._f_log.write('{0:%d-%m-%Y %H:%M:%S} MySQL exception: {1}\n'.format(datetime.datetime.now(), err))                     
                                         
                     self.cnx.rollback()
                     
                     return False
                 
                 inserted_quotes += self.db_cursor.rowcount
+                
+            processed_moex_secids.append(last_moex_secid)
             
-        self._f_log.write('{:%d-%m-%Y %H:%M:%S} {} quotes inserted out of {}\n'.format(datetime.datetime.now(), inserted_quotes, history_len))
+        self._f_log.write('{0:%d-%m-%Y %H:%M:%S} {1} quotes inserted out of {2}\n'.format(datetime.datetime.now(), inserted_quotes, history_len))
         
         self.cnx.commit()        
             
@@ -157,15 +155,15 @@ class MoexISSClient:
         
     def update_bonds_info(self, url = 'http://iss.moex.com/iss/engines/stock/markets/bonds/securities.json'):                                
         d = datetime.date.today()
-        self._f_log.write('Updating bondinfo database...{:%d-%m-%Y}\n'.format(d))        
+        self._f_log.write('Updating bondinfo database...{0:%d-%m-%Y}\n'.format(d))        
         #Fetch all securities from database
         bonds_dict = self._fetch_bonds_records(d, True)
 
         created_bonds = list()
         coupons_updated = list()
         putoptions_updated = list()
+        processed_moex_secids = list()
         
-        last_moex_secid=''
         unchanged_bonds_count = 0
         absent_bonds_count = 0        
         mark_matured_count = 0        
@@ -185,10 +183,10 @@ class MoexISSClient:
         jdata = jsec['data']
                                     
         for jrec in jdata:                
-            if jrec[c['BOARDID']] not in self._boards_dict:
-                continue
+            last_moex_secid = jrec[c['SECID']]
             
-            last_moex_secid = jrec[c['SECID']]                 
+            if jrec[c['BOARDID']] not in self._boards_dict or last_moex_secid in processed_moex_secids:
+                continue                  
                 
             bond_rec = bonds_dict.pop(last_moex_secid, None)                
                 
@@ -196,7 +194,6 @@ class MoexISSClient:
                 
             if bond_rec is None:
                 if updated_bond_rec is None:
-                    #absent_bonds[last_moex_secid] = (last_moex_secid, jrec[c['SHORTNAME']], jrec[c['FACEUNIT']])
                     absent_bonds_count += 1
                 else:
                     created_bonds.append(updated_bond_rec.sid)
@@ -211,7 +208,9 @@ class MoexISSClient:
                     if updated_bond_rec.cid != bond_rec.cid:
                         coupons_updated.append(updated_bond_rec.cid)
                     if updated_bond_rec.pid != bond_rec.pid:
-                        putoptions_updated.append(updated_bond_rec.pid)                       
+                        putoptions_updated.append(updated_bond_rec.pid)
+            
+            processed_moex_secids.append(last_moex_secid)                       
                     
         if len(bonds_dict) > 0:
             mark_matured_count = self._mark_matured_bonds(bonds_dict)
@@ -219,16 +218,16 @@ class MoexISSClient:
         self.cnx.commit()
         
         d = datetime.datetime.now()
-        self._f_log.write('{:%d-%m-%Y %H:%M:%S} Records processed: {}\n'.format(d, len(jdata)))        
+        self._f_log.write('{0:%d-%m-%Y %H:%M:%S} Records processed: {1}\n'.format(d, len(jdata)))        
         if len(created_bonds) > 0:
             self._f_log.write('{0:%d-%m-%Y %H:%M:%S} Bonds created: {1} (id {2}..{3})\n'.format(d, len(created_bonds), created_bonds[0], created_bonds[-1]))
         if len(coupons_updated) > 0:
             self._f_log.write('{0:%d-%m-%Y %H:%M:%S} Coupons updated: {1} (id {2}..{3})\n'.format(d, len(coupons_updated), coupons_updated[0], coupons_updated[-1]))
         if len(putoptions_updated) > 0:
             self._f_log.write('{0:%d-%m-%Y %H:%M:%S} Putoptions updated: {1} (id {2}..{3})\n'.format(d, len(putoptions_updated), putoptions_updated[0], putoptions_updated[-1]))
-        self._f_log.write('{:%d-%m-%Y %H:%M:%S} Bonds unchanged: {}\n'.format(d, unchanged_bonds_count))
-        self._f_log.write('{:%d-%m-%Y %H:%M:%S} Bonds marked as matured: {}\n'.format(d, mark_matured_count))
-        self._f_log.write('{:%d-%m-%Y %H:%M:%S} Eurobonds: {}\n'.format(d, absent_bonds_count))        
+        self._f_log.write('{0:%d-%m-%Y %H:%M:%S} Bonds unchanged: {1}\n'.format(d, unchanged_bonds_count))
+        self._f_log.write('{0:%d-%m-%Y %H:%M:%S} Bonds marked as matured: {1}\n'.format(d, mark_matured_count))
+        self._f_log.write('{0:%d-%m-%Y %H:%M:%S} Eurobonds: {1}\n'.format(d, absent_bonds_count))        
         
         return        
     
