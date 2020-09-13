@@ -295,7 +295,7 @@ class MoexISSClient:
                 if updated_bond_rec.buybackdate is not None and valid_buybackdate != updated_bond_rec.buybackdate:
                     #assume no valid buybackdate in database records 
                     buybackdate_not_found = True
-                    self.db_cursor.execute("SELECT id, buybackdate FROM putoptions1 WHERE secid = %s", (updated_bond_rec.sid, ))                
+                    self.db_cursor.execute("SELECT id, buybackdate FROM putoptions WHERE secid = %s", (updated_bond_rec.sid, ))                
                 
                     for row in self.db_cursor:
                         #try to find valid buybackdate in database records
@@ -304,8 +304,8 @@ class MoexISSClient:
                 
                 if updated_bond_rec.buybackdate is None or buybackdate_not_found:            
                     valid_offerdate = self._get_valid_date(jrec[c['OFFERDATE']])
-                    #putoptions1                    
-                    self.db_cursor.execute("INSERT INTO putoptions1 (secid, buybackdate, offerdate) VALUES (%s, %s, %s)", (updated_bond_rec.sid, valid_buybackdate, valid_offerdate))            
+                    #putoptions                    
+                    self.db_cursor.execute("INSERT INTO putoptions (secid, buybackdate, offerdate) VALUES (%s, %s, %s)", (updated_bond_rec.sid, valid_buybackdate, valid_offerdate))            
             
                     if self.db_cursor.lastrowid is not None:
                         updated_bond_rec.pid = self.db_cursor.lastrowid 
@@ -319,7 +319,7 @@ class MoexISSClient:
                 if updated_bond_rec.coupondate is not None and valid_coupondate != updated_bond_rec.coupondate:
                     #assume no valid coupondate in database records
                     coupondate_not_found = True
-                    self.db_cursor.execute("SELECT id, coupondate FROM coupons1 WHERE secid = %s", (updated_bond_rec.sid, ))
+                    self.db_cursor.execute("SELECT id, coupondate FROM coupons WHERE secid = %s", (updated_bond_rec.sid, ))
                     
                     for row in self.db_cursor:
                         #try to find valid coupondate in database records
@@ -327,8 +327,8 @@ class MoexISSClient:
                             coupondate_not_found = False
                 
                 if updated_bond_rec.coupondate is None or coupondate_not_found:            
-                    #coupons1
-                    self.db_cursor.execute("INSERT INTO coupons1 (secid, coupondate, couponperiod, couponpercent, couponvalue) VALUES (%s, %s, %s, %s, %s)", (updated_bond_rec.sid, valid_coupondate, jrec[c['COUPONPERIOD']], jrec[c['COUPONPERCENT']], jrec[c['COUPONVALUE']]))
+                    #coupons
+                    self.db_cursor.execute("INSERT INTO coupons (secid, coupondate, couponperiod, couponpercent, couponvalue) VALUES (%s, %s, %s, %s, %s)", (updated_bond_rec.sid, valid_coupondate, jrec[c['COUPONPERIOD']], jrec[c['COUPONPERCENT']], jrec[c['COUPONVALUE']]))
             
                     if self.db_cursor.lastrowid is not None:
                         updated_bond_rec.cid = self.db_cursor.lastrowid 
@@ -416,8 +416,8 @@ class MoexISSClient:
             else:
                 return None
         
-        #bonds1
-        ins_stmt = ("INSERT INTO bonds1 "
+        #bonds
+        ins_stmt = ("INSERT INTO bonds "
                     "(shortname, moex_secid, regnumber, isin, emitent_id, initialfacevalue, faceunit, matdate, earlyrepayment, issuesize, is_matured, bond_type) "
                     "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)")
         
@@ -436,9 +436,9 @@ class MoexISSClient:
     def _fetch_bonds_records(self, trdate, filter_matured):            
         bonds_dict = dict()
                 
-        sel_stmt = ("SELECT s.moex_secid, s.id, c.id, c.coupondate, p.id, p.buybackdate FROM bonds1 AS s "
-                    "LEFT JOIN (SELECT c1.id, c1.secid, c1.coupondate FROM coupons1 AS c1 INNER JOIN (SELECT cmin.secid AS secid, MIN(cmin.coupondate) AS min_ccd FROM coupons1 AS cmin WHERE cmin.coupondate >= %s GROUP BY cmin.secid) AS c2 ON c1.secid = c2.secid AND c1.coupondate = c2.min_ccd) AS c ON s.id = c.secid "
-                    "LEFT JOIN (SELECT p1.id, p1.secid, p1.buybackdate FROM putoptions1 AS p1 INNER JOIN (SELECT pmin.secid AS secid, MIN(pmin.buybackdate) AS min_bbd FROM putoptions1 AS pmin WHERE pmin.buybackdate >= %s GROUP BY pmin.secid) AS p2 ON p1.secid = p2.secid AND p1.buybackdate = p2.min_bbd) AS p ON s.id = p.secid")                     
+        sel_stmt = ("SELECT s.moex_secid, s.id, c.id, c.coupondate, p.id, p.buybackdate FROM bonds AS s "
+                    "LEFT JOIN (SELECT c1.id, c1.secid, c1.coupondate FROM coupons AS c1 INNER JOIN (SELECT cmin.secid AS secid, MIN(cmin.coupondate) AS min_ccd FROM coupons AS cmin WHERE cmin.coupondate >= %s GROUP BY cmin.secid) AS c2 ON c1.secid = c2.secid AND c1.coupondate = c2.min_ccd) AS c ON s.id = c.secid "
+                    "LEFT JOIN (SELECT p1.id, p1.secid, p1.buybackdate FROM putoptions AS p1 INNER JOIN (SELECT pmin.secid AS secid, MIN(pmin.buybackdate) AS min_bbd FROM putoptions AS pmin WHERE pmin.buybackdate >= %s GROUP BY pmin.secid) AS p2 ON p1.secid = p2.secid AND p1.buybackdate = p2.min_bbd) AS p ON s.id = p.secid")                     
         
         if filter_matured:
             sel_stmt += " WHERE s.is_matured = 0"
@@ -506,7 +506,7 @@ class MoexISSClient:
         
         for k in unprocessed_bonds:
             try:
-                self.db_cursor.execute("UPDATE bonds1 SET is_matured = TRUE WHERE matdate < %s AND id = %s", (d, unprocessed_bonds[k].sid))
+                self.db_cursor.execute("UPDATE bonds SET is_matured = TRUE WHERE matdate < %s AND id = %s", (d, unprocessed_bonds[k].sid))
                 num_affected = self.db_cursor.rowcount 
                 if num_affected == 1:
                     matured_bonds.append(str(unprocessed_bonds[k].sid))
@@ -645,7 +645,7 @@ class MoexISSClient:
                     if cursor.lastrowid != 0:
                         emitents_dict[emitent_id] = cursor.lastrowid
                 
-                sec_stmt = ("INSERT IGNORE INTO securities (shortname, regnumber, isin, emitent_id) VALUES (%s, %s, %s, %s)")
+                sec_stmt = ("INSERT IGNORE INTO bonds (shortname, regnumber, isin, emitent_id) VALUES (%s, %s, %s, %s)")
                 sec_data = (r[cols_dict['shortname']], r[cols_dict['regnumber']], r[cols_dict['isin']], emitents_dict[emitent_id])  
                 
                 cursor.execute(sec_stmt, sec_data)
