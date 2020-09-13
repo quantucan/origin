@@ -17,6 +17,8 @@ class MoexISSClient:
     _moex_auth_url = 'https://passport.moex.com/authenticate:443'
     _hwd = HolidayWeekDays()
     _mysql_err_str = '{0:%d-%m-%Y %H:%M:%S} MySQL exception: {1}\n'
+    dbconn_params = dict()
+    boards_dict = dict()
     
     def __init__(self, user = '', password = ''):
         self.pswd_mgr = request.HTTPPasswordMgrWithDefaultRealm()
@@ -37,14 +39,40 @@ class MoexISSClient:
         log_dir = os.path.expanduser('~Александр\\issdataload\\') 
         if not os.path.isdir(log_dir):
             os.mkdir(log_dir)
-        self._f_log = open(os.path.join(log_dir, 'update.log'), 'at', encoding='utf-8')        
-            
+        self._f_log = open(os.path.join(log_dir, 'update.log'), 'at', encoding='utf-8')
+        
+        with open('.\\config.ini', 'rt') as fhand:
+            for l in fhand:
+                p = l.strip().split('=')
+                if len(p) == 2:
+                    self.dbconn_params[p[0]] = p[1]    
         return
     
-    def connect(self, user='root', password='admiN123', database='bondinfo', host='127.0.0.1', port=3306):
-        try:
+    def connect(self):
+        if len(self.dbconn_params) == 0:
+            return False
+        
+        user = self.dbconn_params.get('user', None) 
+        password = self.dbconn_params.get('password', None)
+        database = self.dbconn_params.get('database', None)
+        
+        if user is None or password is None or database is None:
+            return False
+        
+        host = self.dbconn_params.get('host', None)
+        if host is None:
+            host = '127.0.0.1'
+        
+        port = self.dbconn_params.get('port', None)
+        if port is None:
+            port = 3306
+        
+        try:            
             self.cnx = mysql.connector.connect(user=user, password=password, database=database, host=host, port=port)
             self.db_cursor = self.cnx.cursor()
+            
+            #Fetch boards and settlement codes from database
+            self.boards_dict = self._fetch_boards_records('MAIN')
             
             return True
         
@@ -53,9 +81,21 @@ class MoexISSClient:
             
             return False 
     
+    def load_quotes(self):
+        self.db_cursor.execute("SELECT MAX(tradedate) FROM quotes")        
+        row = self.db_cursor.fetchone()        
+        next_trdate = row[0] + datetime.timedelta(days=1)
+        cur_date = datetime.date.today()
+        
+        while next_trdate <= cur_date:
+            res = self.load_end_of_day(next_trdate)
+            
+            if res:
+                print(next_trdate.ctime(), 'OK')
+            
+            next_trdate += datetime.timedelta(days=1)
+            
     def load_end_of_day(self, tradedate, url='http://iss.moex.com/iss/history/engines/stock/markets/bonds/sessions/1/securities.json'):
-        #Fetch boards and settlement codes from database
-        boards_dict = self._fetch_boards_records('MAIN')
         #Fetch all securities from database
         bonds_dict = self._fetch_bonds_records(tradedate, False)
         
@@ -105,7 +145,7 @@ class MoexISSClient:
             
         for jrec in jdata:
             last_moex_secid = jrec[c['SECID']]            
-            board_rec = boards_dict.get(jrec[c['BOARDID']], None)            
+            board_rec = self.boards_dict.get(jrec[c['BOARDID']], None)            
             
             if board_rec is None or last_moex_secid in processed_moex_secids:
                 continue            
@@ -156,12 +196,10 @@ class MoexISSClient:
         return True            
         
     def update_bonds_info(self, url = 'http://iss.moex.com/iss/engines/stock/markets/bonds/securities.json'):                                
-        d = datetime.date.today()
-        self._f_log.write('Updating bondinfo database...{0:%d-%m-%Y}\n'.format(d))        
-        #Fetch boards and settlement codes from database
-        boards_dict = self._fetch_boards_records('MAIN')
+        cur_date = datetime.date.today()
+        self._f_log.write('Updating bondinfo database...{0:%d-%m-%Y}\n'.format(cur_date))        
         #Fetch all securities from database
-        bonds_dict = self._fetch_bonds_records(d, True)
+        bonds_dict = self._fetch_bonds_records(cur_date, True)
 
         created_bonds = list()
         coupons_updated = list()
@@ -188,7 +226,7 @@ class MoexISSClient:
         for jrec in jdata:                
             last_moex_secid = jrec[c['SECID']]
             
-            if jrec[c['BOARDID']] not in boards_dict or last_moex_secid in processed_moex_secids:
+            if jrec[c['BOARDID']] not in self.boards_dict or last_moex_secid in processed_moex_secids:
                 continue                  
                 
             bond_rec = bonds_dict.pop(last_moex_secid, None)                
@@ -232,6 +270,8 @@ class MoexISSClient:
         if len(matured_bonds) > 0:
             self._f_log.write('{0:%d-%m-%Y %H:%M:%S} Bonds marked as matured: {1} (id {2})\n'.format(d, len(matured_bonds), ', '.join(matured_bonds)))
         self._f_log.write('{0:%d-%m-%Y %H:%M:%S} Eurobonds: {1}\n'.format(d, absent_bonds_count))        
+        
+        print('Bondinfo database has been updated')
         
         return        
     

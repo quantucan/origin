@@ -11,23 +11,22 @@ def main(cmd_args):
     iss = MoexISSClient()
     
     if not iss.connect():
-        print('Can\'t connect to bondinfo database')        
+        print('Can\'t connect to bondinfo database')                
         return
     
     if len(cmd_args) == 2 and cmd_args[1] == '--updbonds':
-        try:
-            iss.update_bonds_info()
-            print('Bondinfo database has been updated')
-        except Exception as err:
-            print('Exception:', err.msg)
-    elif len(cmd_args) == 3 and cmd_args[1] == '--updquotes':        
-        try:
-            trdate = datetime.date.fromisoformat(cmd_args[2])
-            res = iss.load_end_of_day(trdate)
-            if res:
-                print(trdate, 'OK')
-        except Exception as err:
-                print('Exception:', err)
+        iss.update_bonds_info()        
+    elif len(cmd_args) == 3 and cmd_args[1] == '--updquotes':
+        trdate = datetime.date.fromisoformat(cmd_args[2])
+        res = iss.load_end_of_day(trdate)
+        if res:
+            print(trdate, 'OK')        
+    else:
+        iss.update_bonds_info()
+        iss.load_quotes()        
 
 if __name__ == '__main__':
-    main(sys.argv)
+    try:
+        main(sys.argv)
+    except Exception as err:
+        print('Exception:', err)
