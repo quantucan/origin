@@ -10,22 +10,22 @@ from lxml import etree
 
 def main():
     sp_rating_path = r'.\SP'
-    ns = {'r' : 'http://xbrl.sec.gov/ratings/2015-03-31'}
+    sec_ns = {'r' : 'http://xbrl.sec.gov/ratings/2015-03-31'}
     
     cnx = mysql.connector.connect(user = 'root', password = 'admiN123', database = 'bondinfo', host = '127.0.0.1', port = 3306)
     cur = cnx.cursor()
     
-    fname = 'SP-NAME-YY287944738-OJSC-First-Collection-Bureau-2020-08-01-OBLIGOR.xml'
-    emitent_id = 204
+    fname = 'SP-NAME-YY225129508-Lenta-Ltd--2020-08-01-OBLIGOR.xml'
+    emitent_id = 42
     
     rfile = os.path.join(sp_rating_path, fname)    
     
     rocra = etree.parse(rfile)        
             
-    #lei_rec = rocra.xpath(r'r:ROCRA/r:OD/r:LEI', namespaces=ns)        
+    #lei_rec = rocra.xpath(r'r:ROCRA/r:OD/r:LEI', namespaces=sec_ns)        
     #lei_code = lei_rec[0].text
         
-    lt_ord_recs = rocra.xpath(r'r:ROCRA/r:OD/r:ORD[r:RT="Issuer Credit Rating" and r:RST="Foreign Currency LT"]', namespaces=ns)
+    lt_ord_recs = rocra.xpath(r'r:ROCRA/r:OD/r:ORD[r:RT="Issuer Credit Rating" and r:RST="Foreign Currency LT"]', namespaces=sec_ns)
     for ord_rec in lt_ord_recs:                    
         rd = {'emitent_id' : emitent_id, 'rad' : None, 'rating' : None, 'rol' : None, 'wst' : None}
                     
