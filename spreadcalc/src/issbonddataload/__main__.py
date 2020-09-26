@@ -5,7 +5,7 @@ Created on 28 янв. 2020 г.
 '''
 import sys
 import datetime
-from issdataload.issclient import MoexISSClient
+from issbonddataload.issclient import MoexISSClient
 
 def main(cmd_args):
     iss = MoexISSClient()
@@ -23,7 +23,9 @@ def main(cmd_args):
             print(trdate, 'OK')        
     else:
         iss.update_bonds_info()
-        iss.load_quotes()        
+        iss.load_quotes()
+    
+    return        
 
 if __name__ == '__main__':
     try:

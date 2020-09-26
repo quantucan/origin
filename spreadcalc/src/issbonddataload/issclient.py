@@ -3,7 +3,7 @@ Created on 28 янв. 2020 г.
 
 @author: Александр
 '''
-from issdataload.bondrecord import BondRecord, BoardRecord, HolidayWeekDays
+from issbonddataload.bondrecord import BondRecord, BoardRecord, HolidayWeekDays
 from urllib import request  
 from http import cookiejar
 import ssl
@@ -36,12 +36,12 @@ class MoexISSClient:
         #self.iss_opener.add_handler(self.https_handler) 
         self.iss_opener.add_handler(self.cookie_processor)
                         
-        log_dir = os.path.expanduser('~Александр\\issdataload\\') 
+        log_dir = os.path.expanduser('~Александр\\issbonddataload\\') 
         if not os.path.isdir(log_dir):
             os.mkdir(log_dir)
         self._f_log = open(os.path.join(log_dir, 'update.log'), 'at', encoding='utf-8')
         
-        with open('.\\config.ini', 'rt') as fhand:
+        with open('.\\issbonddataload\\config.ini', 'rt') as fhand:
             for l in fhand:
                 p = l.strip().split('=')
                 if len(p) == 2:
